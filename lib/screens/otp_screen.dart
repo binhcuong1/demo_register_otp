@@ -16,8 +16,9 @@ class OtpScreen extends StatefulWidget {
 class _OtpScreenState extends State<OtpScreen> {
   final TextEditingController _otpController = TextEditingController();
   Timer? _timer;
-  int _seconds = 240; // 4 phút
+  int _seconds = 240; // 4 minutes
   bool _expired = false;
+  bool _loading = false; // Added for resend OTP loading state
 
   @override
   void initState() {
@@ -26,7 +27,7 @@ class _OtpScreenState extends State<OtpScreen> {
   }
 
   void _startTimer() {
-    _timer?.cancel(); // hủy nếu có timer cũ
+    _timer?.cancel();
     setState(() {
       _seconds = 240;
       _expired = false;
@@ -95,16 +96,44 @@ class _OtpScreenState extends State<OtpScreen> {
     }
   }
 
-  void _resendOtp() {
-    _startTimer(); // reset lại countdown về 4p
-    _otpController.clear();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("📩 OTP mới đã được gửi")),
-    );
-    // TODO: gọi API gửi lại OTP ở đây
+  Future<void> _resendOtp() async {
+    setState(() => _loading = true);
+
+    try {
+      final url = Uri.parse("http://10.0.2.2:3000/otp/send");
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"phone": widget.phone}),
+      );
+
+      setState(() => _loading = false);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data["ok"] == true) {
+          _startTimer();
+          _otpController.clear();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("📩 OTP mới đã được gửi")),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("⚠️ Gửi OTP thất bại: ${data["message"]}")),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Lỗi server: ${response.statusCode}")),
+        );
+      }
+    } catch (e) {
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("🚨 Lỗi kết nối: $e")),
+      );
+    }
   }
-
-
 
   @override
   void dispose() {
@@ -129,70 +158,90 @@ class _OtpScreenState extends State<OtpScreen> {
           style: TextStyle(color: Colors.black),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              "Nhập mã OTP",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _otpController,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              maxLength: 6,
-              style: const TextStyle(
-                fontSize: 28,
-                letterSpacing: 16,
-              ),
-              decoration: InputDecoration(
-                counterText: "",
-                hintText: "------",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
                 ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              "$minutes:$secs",
-              style: const TextStyle(
-                fontSize: 18,
-                color: Colors.red,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _verifyOtp,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(
-                    vertical: 16, horizontal: 80),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  "Nhập mã OTP",
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              child: const Text(
-                "Tiếp tục",
-                style:
-                TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+                const SizedBox(height: 16),
+                Text(
+                  "Mã OTP đã được gửi đến ${widget.phone}",
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: _otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: InputDecoration(
+                    labelText: "Mã OTP",
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    counterText: "",
+                  ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18, letterSpacing: 8),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "Thời gian còn lại: $minutes:$secs",
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _expired || _loading ? null : _verifyOtp,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _loading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                    "Xác minh",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: _expired && !_loading ? _resendOtp : null,
+                  child: Text(
+                    "Gửi lại OTP",
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: _expired && !_loading ? Colors.blue : Colors.grey,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: _resendOtp, // luôn bấm được
-              child: const Text(
-                "Gửi lại OTP",
-                style: TextStyle(color: Colors.red, fontSize: 16),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

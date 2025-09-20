@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/otp_screen.dart'; // import màn hình OTP của bạn
+import 'screens/register_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -13,11 +13,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'OTP Demo',
       theme: ThemeData(primarySwatch: Colors.blue),
-      // chạy thẳng vào OtpScreen
-      home: const OtpScreen(
-        phone: "0961520154", // test số phone
-        reqId: "demo_reqId", // tạm fake để chạy giao diện
-      ),
+      // Chạy thẳng vào RegisterScreen
+      home: const RegisterScreen(),
     );
   }
 }
